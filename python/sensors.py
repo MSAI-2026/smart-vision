@@ -12,16 +12,21 @@ import sys
 
 
 def find_arduino_port():
-    """Auto-detect Arduino Mega USB serial port."""
+    """Auto-detect Arduino Mega USB serial port (macOS, Linux, Windows)."""
+    candidates = []
     for port in serial.tools.list_ports.comports():
-        # Arduino Mega typically shows as usbmodem (macOS) or USB Serial (Linux)
-        if "usbmodem" in port.device.lower() or "usbserial" in port.device.lower():
-            return port.device
-        # Windows: COM ports, check for Arduino in description
+        dev = (port.device or "").lower()
         desc = (port.description or "").lower()
+        hwid = (port.hwid or "").lower()
+        if "usbmodem" in dev or "usbserial" in dev:
+            return port.device
         if "arduino" in desc or "mega" in desc or "ch340" in desc or "cp210" in desc:
             return port.device
-    return None
+        if "ttyacm" in dev or "ttyusb" in dev:
+            candidates.append(port.device)
+        if dev.startswith("com") and ("2341" in hwid or "1a86" in hwid or "arduino" in desc):
+            return port.device
+    return candidates[0] if candidates else None
 
 
 class SensorReader:
