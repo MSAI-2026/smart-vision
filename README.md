@@ -30,8 +30,8 @@ A standalone system that fuses **TF-Mini Plus** LiDAR, **BNO085** IMU, and MacBo
 |-----------|-----|------------------|
 | TF-Mini Plus | Red (5V) | 5V |
 | TF-Mini Plus | Black (GND) | GND |
-| TF-Mini Plus | White (TX) | RX1 (pin 19) |
-| TF-Mini Plus | Green/Blue (RX) | TX1 (pin 18) |
+| TF-Mini Plus | Green/Blue (RX) | RX1 (pin 19) |
+| TF-Mini Plus | White (TX) | TX1 (pin 18) |
 | BNO085 | VIN (3.3V) | 3.3V |
 | BNO085 | GND | GND |
 | BNO085 | SDA | Pin 20 |
