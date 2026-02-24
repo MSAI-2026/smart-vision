@@ -113,29 +113,31 @@ def main():
             # Overlay: sensor data
             overlay_text = [
                 f"Distance: {sensor_data['distance']} cm",
-                f"Yaw: {sensor_data['yaw']:.1f} Pitch: {sensor_data['pitch']:.1f} Roll: {sensor_data['roll']:.1f}",
+                f"Yaw: {sensor_data['yaw']:.1f}  Pitch: {sensor_data['pitch']:.1f}  Roll: {sensor_data['roll']:.1f}",
             ]
             y_offset = 30
             for line in overlay_text:
+                # Shadow/outline (black)
                 cv2.putText(
                     frame,
                     line,
                     (10, y_offset),
                     cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (255, 255, 255),
+                    0.7,
+                    (0, 0, 0),
+                    3,
+                )
+                # Main text (bright yellow)
+                cv2.putText(
+                    frame,
+                    line,
+                    (10, y_offset),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (0, 255, 255),
                     2,
                 )
-                cv2.putText(
-                    frame,
-                    line,
-                    (10, y_offset),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (0, 0, 0),
-                    1,
-                )
-                y_offset += 25
+                y_offset += 28
 
             # Overlay: fused result
             if fused:
