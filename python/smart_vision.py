@@ -88,7 +88,6 @@ def main():
     last_spoken = ""
     last_speak_time = 0
     speak_cooldown = 4.0  # seconds
-    last_imu_log_time = 0.0
 
     try:
         while True:
@@ -98,29 +97,6 @@ def main():
 
             h, w = frame.shape[:2]
             sensor_data = reader.get()
-
-            # Console: IMU summary at a reasonable cadence
-            now = time.time()
-            if now - last_imu_log_time >= 0.5:
-                last_imu_log_time = now
-                quat = sensor_data.get("quaternion", {})
-                lin = sensor_data.get("linear_accel", {})
-                gyro = sensor_data.get("gyro", {})
-                mag = sensor_data.get("mag", {})
-                accel = sensor_data.get("accel", {})
-                gravity = sensor_data.get("gravity", {})
-                imu_summary = (
-                    f"IMU | Dist={sensor_data['distance']}cm "
-                    f"R={sensor_data['roll']:.1f} P={sensor_data['pitch']:.1f} Y={sensor_data['yaw']:.1f} | "
-                    f"Quat=({quat.get('w', 0.0):.3f},{quat.get('x', 0.0):.3f},"
-                    f"{quat.get('y', 0.0):.3f},{quat.get('z', 0.0):.3f}) | "
-                    f"LinAcc=({lin.get('x', 0.0):.2f},{lin.get('y', 0.0):.2f},{lin.get('z', 0.0):.2f}) | "
-                    f"Gyro=({gyro.get('x', 0.0):.2f},{gyro.get('y', 0.0):.2f},{gyro.get('z', 0.0):.2f}) | "
-                    f"Mag=({mag.get('x', 0.0):.2f},{mag.get('y', 0.0):.2f},{mag.get('z', 0.0):.2f}) | "
-                    f"Accel=({accel.get('x', 0.0):.2f},{accel.get('y', 0.0):.2f},{accel.get('z', 0.0):.2f}) | "
-                    f"Grav=({gravity.get('x', 0.0):.2f},{gravity.get('y', 0.0):.2f},{gravity.get('z', 0.0):.2f})"
-                )
-                print(imu_summary)
             objects = detector.detect(frame)
 
             fused = fuse(
@@ -134,53 +110,10 @@ def main():
             # Draw detections
             frame = detector.draw_detections(frame, objects)
 
-            # Overlay: sensor data (distance + IMU)
-            quat = sensor_data.get("quaternion", {})
-            lin = sensor_data.get("linear_accel", {})
-            gyro = sensor_data.get("gyro", {})
-            mag = sensor_data.get("mag", {})
-            accel = sensor_data.get("accel", {})
-            gravity = sensor_data.get("gravity", {})
+            # Overlay: sensor data
             overlay_text = [
                 f"Distance: {sensor_data['distance']} cm",
                 f"Yaw: {sensor_data['yaw']:.1f}  Pitch: {sensor_data['pitch']:.1f}  Roll: {sensor_data['roll']:.1f}",
-                (
-                    "Quat: "
-                    f"w={quat.get('w', 0.0):.3f} "
-                    f"x={quat.get('x', 0.0):.3f} "
-                    f"y={quat.get('y', 0.0):.3f} "
-                    f"z={quat.get('z', 0.0):.3f}"
-                ),
-                (
-                    "LinAcc: "
-                    f"x={lin.get('x', 0.0):.2f} "
-                    f"y={lin.get('y', 0.0):.2f} "
-                    f"z={lin.get('z', 0.0):.2f}"
-                ),
-                (
-                    "Gyro: "
-                    f"x={gyro.get('x', 0.0):.2f} "
-                    f"y={gyro.get('y', 0.0):.2f} "
-                    f"z={gyro.get('z', 0.0):.2f}"
-                ),
-                (
-                    "Mag: "
-                    f"x={mag.get('x', 0.0):.2f} "
-                    f"y={mag.get('y', 0.0):.2f} "
-                    f"z={mag.get('z', 0.0):.2f}"
-                ),
-                (
-                    "Accel: "
-                    f"x={accel.get('x', 0.0):.2f} "
-                    f"y={accel.get('y', 0.0):.2f} "
-                    f"z={accel.get('z', 0.0):.2f}"
-                ),
-                (
-                    "Grav: "
-                    f"x={gravity.get('x', 0.0):.2f} "
-                    f"y={gravity.get('y', 0.0):.2f} "
-                    f"z={gravity.get('z', 0.0):.2f}"
-                ),
             ]
             y_offset = 30
             for line in overlay_text:
