@@ -3,8 +3,10 @@
 Smart Vision - Main standalone script.
 Reads LiDAR + IMU from Arduino, runs camera object detection,
 fuses to determine what the user is looking at, and outputs via display + TTS.
+When Arduino is not connected, uses sample_sensor_data.csv for demo mode.
 """
 
+import os
 import sys
 import time
 import threading
@@ -58,15 +60,23 @@ def main():
     print("Smart Vision - Starting...")
     print("Press 'q' to quit.")
 
-    # Sensor reader (Arduino)
-    try:
-        reader = SensorReader()
+    # Sensor reader (Arduino or sample file)
+    port = find_arduino_port()
+    if port:
+        reader = SensorReader(port=port)
         reader.connect()
         reader.start()
-    except RuntimeError as e:
-        print(f"Arduino not found: {e}")
-        print("Connect Arduino with LiDAR and IMU, then run again.")
-        sys.exit(1)
+    else:
+        sample_path = os.path.join(os.path.dirname(__file__), "sample_sensor_data.csv")
+        try:
+            reader = SensorReader(sample_file=sample_path)
+            reader.connect()
+            reader.start()
+            print("Arduino not found; using sample_sensor_data.csv")
+        except FileNotFoundError as e:
+            print(f"{e}")
+            print("Connect Arduino with LiDAR and IMU, or ensure sample_sensor_data.csv exists.")
+            sys.exit(1)
 
     # Object detector (camera)
     detector = ObjectDetector(camera_index=0)

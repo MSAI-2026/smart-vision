@@ -1,9 +1,11 @@
 """
 Serial sensor reader for Smart Vision.
 Reads distance (LiDAR) and orientation (roll, pitch, yaw) from Arduino over USB serial.
+When Arduino is not connected, can replay from a sample CSV file (same format).
 Runs in a background thread and exposes latest values via thread-safe access.
 """
 
+import os
 import serial
 import serial.tools.list_ports
 import threading
@@ -30,10 +32,9 @@ def find_arduino_port():
 
 
 class SensorReader:
-    """Reads distance and orientation from Arduino, provides thread-safe access."""
+    """Reads distance and orientation from Arduino (or sample file), provides thread-safe access."""
 
-    def __init__(self, port=None, baud=115200):
-        self.port = port or find_arduino_port()
+    def __init__(self, port=None, sample_file=None, baud=115200):
         self.baud = baud
         self._serial = None
         self._lock = threading.Lock()
@@ -43,9 +44,26 @@ class SensorReader:
         self._yaw = 0.0
         self._running = False
         self._thread = None
+        if sample_file is not None:
+            self.port = None
+            self.sample_file = sample_file
+            self._file_mode = True
+        else:
+            self.port = port or find_arduino_port()
+            self.sample_file = None
+            self._file_mode = False
+        self._sample_file_path = None
 
     def connect(self):
-        """Open serial connection to Arduino."""
+        """Open serial connection to Arduino, or validate sample file."""
+        if self._file_mode:
+            path = self.sample_file
+            if not os.path.isabs(path):
+                path = os.path.join(os.path.dirname(__file__), path)
+            if not os.path.isfile(path):
+                raise FileNotFoundError(f"Sample file not found: {path}")
+            self._sample_file_path = path
+            return True
         if not self.port:
             raise RuntimeError("Arduino port not found. Connect Arduino and try again.")
         self._serial = serial.Serial(self.port, self.baud, timeout=0.1)
@@ -53,21 +71,29 @@ class SensorReader:
         return True
 
     def disconnect(self):
-        """Close serial connection."""
+        """Close serial connection or stop file replay."""
         self.stop()
         if self._serial and self._serial.is_open:
             self._serial.close()
             self._serial = None
+        self._sample_file_path = None
 
     def start(self):
-        """Start background thread reading serial data."""
+        """Start background thread reading serial or sample file."""
         if self._running:
             return
-        if not self._serial or not self._serial.is_open:
-            self.connect()
-        self._running = True
-        self._thread = threading.Thread(target=self._read_loop, daemon=True)
-        self._thread.start()
+        if self._file_mode:
+            if self._sample_file_path is None:
+                self.connect()
+            self._running = True
+            self._thread = threading.Thread(target=self._read_loop_file, daemon=True)
+            self._thread.start()
+        else:
+            if not self._serial or not self._serial.is_open:
+                self.connect()
+            self._running = True
+            self._thread = threading.Thread(target=self._read_loop, daemon=True)
+            self._thread.start()
 
     def stop(self):
         """Stop background thread."""
@@ -77,7 +103,7 @@ class SensorReader:
             self._thread = None
 
     def _read_loop(self):
-        """Background loop: read lines and parse CSV."""
+        """Background loop: read lines from serial and parse CSV."""
         while self._running and self._serial and self._serial.is_open:
             try:
                 line = self._serial.readline()
@@ -85,6 +111,25 @@ class SensorReader:
                     self._parse_line(line)
             except (serial.SerialException, OSError) as e:
                 sys.stderr.write(f"Serial error: {e}\n")
+                break
+            except Exception as e:
+                sys.stderr.write(f"Parse error: {e}\n")
+        self._running = False
+
+    def _read_loop_file(self):
+        """Background loop: read lines from sample file, parse CSV, loop on EOF."""
+        while self._running and self._sample_file_path:
+            try:
+                with open(self._sample_file_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if not self._running:
+                            break
+                        line = line.strip()
+                        if line:
+                            self._parse_line(line.encode("utf-8"))
+                        time.sleep(0.03)  # ~33 Hz replay
+            except (OSError, IOError) as e:
+                sys.stderr.write(f"Sample file error: {e}\n")
                 break
             except Exception as e:
                 sys.stderr.write(f"Parse error: {e}\n")
@@ -121,7 +166,9 @@ class SensorReader:
             }
 
     def is_connected(self):
-        """Check if serial port is open."""
+        """Check if serial port is open or sample file is replaying."""
+        if self._file_mode:
+            return self._running
         return self._serial is not None and self._serial.is_open
 
 
