@@ -119,6 +119,9 @@ python smart_vision.py
 - Display shows: camera feed, bounding boxes, distance, orientation, and fused result
 - TTS announces *"Looking at [object] at [distance]"* when you look at a detected object (with throttling)
 
+### Demo mode (without Arduino)
+If Arduino is not connected, the app uses `python/data/sample_sensor_data.csv` for simulated sensor data. Camera and object detection still run normally.
+
 ### Serial Monitor Output (IMU debug)
 While the Arduino is running you can monitor raw IMU output:
 ```
@@ -237,16 +240,21 @@ Remove these lines after successful calibration.
 ## Project Structure
 
 ```
-Smart Vision/
+smart-vision/
 ├── arduino/
 │   └── smart_vision_sensors/
 │       └── smart_vision_sensors.ino   — Arduino firmware (LiDAR + IMU)
 ├── python/
+│   ├── data/
+│   │   └── sample_sensor_data.csv     — Sample sensor data (demo mode when Arduino not connected)
+│   ├── models/
+│   │   └── yolov8n.pt                 — YOLOv8-nano weights (auto-downloaded by ultralytics if missing)
+│   ├── src/
+│   │   ├── sensors.py                 — Serial reader (LiDAR + IMU)
+│   │   ├── detector.py                — Camera + YOLOv8 object detection
+│   │   └── fusion.py                  — Fusion logic
 │   ├── smart_vision.py                — Main script
 │   ├── test_connections.py            — Connection test
-│   ├── sensors.py                     — Serial reader (LiDAR + IMU)
-│   ├── detector.py                    — Camera + YOLOv8 object detection
-│   ├── fusion.py                      — Fusion logic
 │   └── requirements.txt
 └── README.md
 ```

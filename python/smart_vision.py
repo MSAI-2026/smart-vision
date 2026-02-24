@@ -13,9 +13,9 @@ import threading
 
 import cv2
 
-from sensors import SensorReader, find_arduino_port
-from detector import ObjectDetector
-from fusion import fuse, FusedResult
+from src.sensors import SensorReader, find_arduino_port
+from src.detector import ObjectDetector
+from src.fusion import fuse, FusedResult
 
 
 # TTS setup (optional - graceful fallback if unavailable)
@@ -67,15 +67,15 @@ def main():
         reader.connect()
         reader.start()
     else:
-        sample_path = os.path.join(os.path.dirname(__file__), "sample_sensor_data.csv")
+        sample_path = os.path.join(os.path.dirname(__file__), "data", "sample_sensor_data.csv")
         try:
             reader = SensorReader(sample_file=sample_path)
             reader.connect()
             reader.start()
-            print("Arduino not found; using sample_sensor_data.csv")
+            print("Arduino not found; using data/sample_sensor_data.csv")
         except FileNotFoundError as e:
             print(f"{e}")
-            print("Connect Arduino with LiDAR and IMU, or ensure sample_sensor_data.csv exists.")
+            print("Connect Arduino with LiDAR and IMU, or ensure data/sample_sensor_data.csv exists.")
             sys.exit(1)
 
     # Object detector (camera)

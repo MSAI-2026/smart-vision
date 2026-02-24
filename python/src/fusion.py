@@ -8,7 +8,7 @@ LiDAR provides distance to that object.
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from detector import DetectedObject
+from .detector import DetectedObject
 
 
 @dataclass

@@ -4,6 +4,8 @@ Uses MacBook built-in camera and YOLOv8-nano for real-time object detection.
 Returns detected objects with class name, confidence, and bounding box center.
 """
 
+import os
+
 import cv2
 import numpy as np
 from dataclasses import dataclass
@@ -42,7 +44,7 @@ class ObjectDetector:
         """
         Args:
             camera_index: Camera index (0 = MacBook FaceTime camera)
-            model_name: YOLOv8 model (yolov8n = nano, lightweight)
+            model_name: YOLOv8 model filename (yolov8n.pt = nano, lightweight)
             conf_threshold: Minimum confidence for detections
         """
         self.camera_index = camera_index
@@ -50,7 +52,14 @@ class ObjectDetector:
         self._cap: Optional[cv2.VideoCapture] = None
         self._model = None
         if HAS_YOLO:
-            self._model = YOLO(model_name)
+            # Prefer models/ dir next to src/
+            _models_dir = os.path.join(os.path.dirname(__file__), "..", "models")
+            _model_path = os.path.join(_models_dir, model_name)
+            if os.path.isfile(_model_path):
+                model_to_load = _model_path
+            else:
+                model_to_load = model_name
+            self._model = YOLO(model_to_load)
 
     def open_camera(self) -> bool:
         """Open camera. Returns True on success."""
