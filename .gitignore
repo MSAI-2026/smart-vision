@@ -15,6 +15,9 @@ build/
 *.pt
 runs/
 
+# Model weights
+*.pth
+
 # IDE
 .idea/
 .vscode/
