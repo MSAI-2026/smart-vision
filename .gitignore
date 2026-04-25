@@ -1,29 +1,24 @@
-# Python
-venv/
-.venv/
+# Python caches
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-.eggs/
-dist/
-build/
+*.pyo
 
-# YOLO / Ultralytics
-*.pt
-runs/
+# Virtual environments
+.venv/
+venv/
+env/
 
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# macOS
+# macOS metadata
 .DS_Store
 
-# Arduino (build output if using Arduino CLI)
-*.hex
-*.elf
+# Build / packaging artifacts
+build/
+dist/
+*.egg-info/
+
+# Data directory
+data/
+
+# Editor/tooling
+.idea/
+.vscode/
