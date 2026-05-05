@@ -1,0 +1,9 @@
+# Package-label OCR pipeline (ocr.py)
+paddlepaddle>=3.0.0
+paddleocr>=2.7.0
+opencv-python-headless>=4.8.0
+Pillow>=10.0.0
+numpy>=1.26.0
+
+# label_llm.py → local Ollama HTTP API
+httpx>=0.27.0
