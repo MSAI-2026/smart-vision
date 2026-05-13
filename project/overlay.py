@@ -2,18 +2,18 @@
 overlay.py -- Build a colour-tinted overlay from a segmentation class map.
 
 Colours:
-    Green  = walkable surfaces  (floor, carpet, rug)
-    Red    = obstacles          (chair, table, sofa, bed, person)
-    Blue   = walls
+    Green  = walkable surfaces  (floor, carpet, rug, stairs)
+    Red    = obstacles          (any class not walkable or wall)
+    Blue   = walls              (wall, door, window)
 """
 
 import numpy as np
 
 # ADE20K class names grouped into categories we care about.
+# Names match / substring-match SegFormer ADE20K labels (e.g. windowpane, screen door).
 CATEGORIES = {
-    "walkable": ["floor", "carpet", "rug"],
-    "obstacle": ["chair", "table", "sofa", "bed", "person"],
-    "wall":     ["wall"],
+    "walkable": ["floor", "carpet", "rug", "stairs", "stairway"],
+    "wall":     ["wall", "door", "screen door", "window", "windowpane"],
 }
 
 # BGR colours for each category (OpenCV uses BGR, not RGB).
@@ -64,16 +64,19 @@ def build_overlay(frame_bgr: np.ndarray, class_map: np.ndarray, id2label: dict) 
     """
     overlay = frame_bgr.copy().astype(np.float32)
 
-    for category, names in CATEGORIES.items():
-        # Find which pixel positions belong to this category.
-        cat_ids = _resolve_ids(names, id2label)
-        if not cat_ids:
-            continue
+    walk_ids = _resolve_ids(CATEGORIES["walkable"], id2label)
+    wall_ids = _resolve_ids(CATEGORIES["wall"], id2label)
+    passable_ids = walk_ids | wall_ids
 
-        mask = np.isin(class_map, list(cat_ids))
-        colour = np.array(COLOURS_BGR[category], dtype=np.float32)
-
-        # Blend: out = (1 - alpha) * original + alpha * colour
+    def _blend(mask: np.ndarray, colour_key: str) -> None:
+        if not np.any(mask):
+            return
+        colour = np.array(COLOURS_BGR[colour_key], dtype=np.float32)
         overlay[mask] = (1.0 - ALPHA) * overlay[mask] + ALPHA * colour
+
+    # Red first, then blue, then green so walkable/wall win over the obstacle complement.
+    _blend(~np.isin(class_map, list(passable_ids)), "obstacle")
+    _blend(np.isin(class_map, list(wall_ids)), "wall")
+    _blend(np.isin(class_map, list(walk_ids)), "walkable")
 
     return overlay.astype(np.uint8)
