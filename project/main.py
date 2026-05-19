@@ -12,7 +12,9 @@ import time
 
 import cv2
 
+from project.audio import AudioNavigator
 from project.model import load_model, segment
+from project.navigation import NavigationAdvisor
 from project.overlay import build_overlay
 
 
@@ -65,6 +67,10 @@ def run(camera_index: int = 0, max_fps: float = 30.0) -> None:
     processor, model, device = load_model()
     print(f"Model ready on {device}.")
 
+    # --- Navigation + audio ---
+    advisor = NavigationAdvisor()
+    audio = AudioNavigator()
+
     # --- Open camera ---
     cap = _open_camera(camera_index)
     if not cap.isOpened():
@@ -98,6 +104,10 @@ def run(camera_index: int = 0, max_fps: float = 30.0) -> None:
             # --- Build the colour overlay ---
             overlay_bgr = build_overlay(frame_bgr, result["class_map"], result["id2label"])
 
+            # --- Navigation direction ---
+            nav = advisor.update(result["class_map"], result["id2label"])
+            audio.announce(nav["direction"])
+
             # --- Draw FPS counter (whole-loop, not just inference) ---
             loop_ms = (time.perf_counter() - loop_start) * 1000.0
             fps_text = f"FPS: {1000.0 / max(loop_ms, 1):.1f}  (infer {result['latency_ms']:.0f}ms)"
@@ -105,6 +115,23 @@ def run(camera_index: int = 0, max_fps: float = 30.0) -> None:
                 overlay_bgr, fps_text,
                 (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9,
                 (0, 255, 255), 2, cv2.LINE_AA,
+            )
+
+            # --- Draw navigation direction + scores ---
+            scores = nav["scores"]
+            dir_text = f"Dir: {nav['direction']}"
+            score_text = (
+                f"L:{scores['left']:.0%}  C:{scores['center']:.0%}  R:{scores['right']:.0%}"
+            )
+            cv2.putText(
+                overlay_bgr, dir_text,
+                (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.8,
+                (255, 255, 255), 2, cv2.LINE_AA,
+            )
+            cv2.putText(
+                overlay_bgr, score_text,
+                (10, 95), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                (200, 200, 200), 1, cv2.LINE_AA,
             )
 
             # --- Show the result ---
@@ -120,6 +147,7 @@ def run(camera_index: int = 0, max_fps: float = 30.0) -> None:
     except KeyboardInterrupt:
         print("\nStopped by user.")
     finally:
+        audio.shutdown()
         cap.release()
         cv2.destroyAllWindows()
 

@@ -10,6 +10,7 @@ setup(
         "numpy",
         "opencv-python",
         "pillow",
+        "pyttsx3",
         "torch",
         "torchvision",
         "transformers",
