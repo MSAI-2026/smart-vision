@@ -7,35 +7,42 @@ Colours:
     Blue   = walls              (wall, door, window)
 """
 
-import cv2
 import numpy as np
 
+# ADE20K class names grouped into categories we care about.
+# Names match / substring-match SegFormer ADE20K labels (e.g. windowpane, screen door).
 CATEGORIES = {
     "walkable": ["floor", "carpet", "rug", "stairs", "stairway"],
     "wall":     ["wall", "door", "screen door", "window", "windowpane"],
 }
 
-# BGR colours for each category.
+# BGR colours for each category (OpenCV uses BGR, not RGB).
 COLOURS_BGR = {
     "walkable": (0, 255, 0),    # green
     "obstacle": (0, 0, 255),    # red
     "wall":     (255, 0, 0),    # blue
 }
 
+# How strongly the tint is blended over the original frame (0-1).
 ALPHA = 0.45
 
-# Cache the per-id colour palette so we don't rebuild it every frame.
-_palette_cache: dict[int, np.ndarray] = {}
 
-
-def _resolve_ids(category_names: list[str], label_lookup: dict[str, int]) -> set[int]:
-    """Map category name list -> set of class IDs, with substring fallback."""
+def _resolve_ids(category_names: list[str], id2label: dict) -> set[int]:
+    """
+    Map human-readable category names to the integer class IDs used by the model.
+    Handles exact matches and substring matches (ADE labels can contain synonyms).
+    """
     ids: set[int] = set()
+    # Build a lowercase lookup from the model's label map.
+    label_lookup = {str(v).strip().lower(): int(k) for k, v in id2label.items()}
+
     for name in category_names:
         target = name.lower().strip()
+        # Try exact match first.
         if target in label_lookup:
             ids.add(label_lookup[target])
             continue
+        # Fall back to substring match.
         for label, cid in label_lookup.items():
             if target in label:
                 ids.add(cid)
@@ -43,30 +50,33 @@ def _resolve_ids(category_names: list[str], label_lookup: dict[str, int]) -> set
     return ids
 
 
-def _build_palette(id2label: dict) -> np.ndarray:
-    """Return a (num_classes, 3) BGR palette mapping each class ID to its overlay colour."""
-    label_lookup = {str(v).strip().lower(): int(k) for k, v in id2label.items()}
-    walk_ids = _resolve_ids(CATEGORIES["walkable"], label_lookup)
-    wall_ids = _resolve_ids(CATEGORIES["wall"], label_lookup)
-
-    num_classes = max(int(k) for k in id2label.keys()) + 1
-    palette = np.empty((num_classes, 3), dtype=np.uint8)
-    palette[:] = COLOURS_BGR["obstacle"]  # default everything to red
-    for cid in wall_ids:
-        palette[cid] = COLOURS_BGR["wall"]
-    for cid in walk_ids:
-        palette[cid] = COLOURS_BGR["walkable"]
-    return palette
-
-
 def build_overlay(frame_bgr: np.ndarray, class_map: np.ndarray, id2label: dict) -> np.ndarray:
-    """Blend a category colour tint onto the camera frame."""
-    key = id(id2label)
-    palette = _palette_cache.get(key)
-    if palette is None:
-        palette = _build_palette(id2label)
-        _palette_cache[key] = palette
+    """
+    Blend category colours onto the camera frame based on the segmentation class map.
 
-    # Single LUT lookup + one blended write — replaces 3 np.isin + 3 float blends.
-    colour_layer = palette[class_map]
-    return cv2.addWeighted(frame_bgr, 1.0 - ALPHA, colour_layer, ALPHA, 0)
+    Args:
+        frame_bgr  -- original camera frame in BGR (from cv2)
+        class_map  -- (H, W) array of predicted class IDs
+        id2label   -- model's class-ID-to-label mapping
+
+    Returns:
+        BGR image (same size) with coloured segmentation overlay.
+    """
+    overlay = frame_bgr.copy().astype(np.float32)
+
+    walk_ids = _resolve_ids(CATEGORIES["walkable"], id2label)
+    wall_ids = _resolve_ids(CATEGORIES["wall"], id2label)
+    passable_ids = walk_ids | wall_ids
+
+    def _blend(mask: np.ndarray, colour_key: str) -> None:
+        if not np.any(mask):
+            return
+        colour = np.array(COLOURS_BGR[colour_key], dtype=np.float32)
+        overlay[mask] = (1.0 - ALPHA) * overlay[mask] + ALPHA * colour
+
+    # Red first, then blue, then green so walkable/wall win over the obstacle complement.
+    _blend(~np.isin(class_map, list(passable_ids)), "obstacle")
+    _blend(np.isin(class_map, list(wall_ids)), "wall")
+    _blend(np.isin(class_map, list(walk_ids)), "walkable")
+
+    return overlay.astype(np.uint8)

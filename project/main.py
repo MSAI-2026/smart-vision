@@ -11,6 +11,7 @@ import sys
 import time
 
 import cv2
+from PIL import Image
 
 from project.audio import AudioNavigator
 from project.model import load_model, segment
@@ -98,8 +99,10 @@ def run(camera_index: int = 0, max_fps: float = 30.0) -> None:
                 break
 
             # --- Segment the frame ---
+            # OpenCV gives BGR; PIL expects RGB.
             frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-            result = segment(frame_rgb, processor, model, device)
+            pil_image = Image.fromarray(frame_rgb)
+            result = segment(pil_image, processor, model, device)
 
             # --- Build the colour overlay ---
             overlay_bgr = build_overlay(frame_bgr, result["class_map"], result["id2label"])
@@ -108,9 +111,8 @@ def run(camera_index: int = 0, max_fps: float = 30.0) -> None:
             nav = advisor.update(result["class_map"], result["id2label"])
             audio.announce(nav["direction"])
 
-            # --- Draw FPS counter (whole-loop, not just inference) ---
-            loop_ms = (time.perf_counter() - loop_start) * 1000.0
-            fps_text = f"FPS: {1000.0 / max(loop_ms, 1):.1f}  (infer {result['latency_ms']:.0f}ms)"
+            # --- Draw FPS counter on the overlay ---
+            fps_text = f"FPS: {1000.0 / max(result['latency_ms'], 1):.1f}"
             cv2.putText(
                 overlay_bgr, fps_text,
                 (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9,

@@ -22,9 +22,3 @@ data/
 # Editor/tooling
 .idea/
 .vscode/
-
-python/ADE*/
-
-*.png
-*.zip
-*.pth
