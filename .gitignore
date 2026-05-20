@@ -22,3 +22,6 @@ data/
 # Editor/tooling
 .idea/
 .vscode/
+
+ADE*/
+python/models/*
