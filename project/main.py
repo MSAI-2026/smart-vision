@@ -14,6 +14,7 @@ import cv2
 from PIL import Image
 
 from project.audio import AudioNavigator
+from project.display import draw_navigation_hints
 from project.model import load_model, segment
 from project.navigation import NavigationAdvisor
 from project.overlay import build_overlay
@@ -70,7 +71,7 @@ def run(camera_index: int = 0, max_fps: float = 30.0) -> None:
 
     # --- Navigation + audio ---
     advisor = NavigationAdvisor()
-    audio = AudioNavigator()
+    audio = AudioNavigator(cooldown_s=2.5, stable_frames=3, stop_stable_frames=6)
 
     # --- Open camera ---
     cap = _open_camera(camera_index)
@@ -109,7 +110,9 @@ def run(camera_index: int = 0, max_fps: float = 30.0) -> None:
 
             # --- Navigation direction ---
             nav = advisor.update(result["class_map"], result["id2label"])
-            audio.announce(nav["direction"])
+            audio.announce(nav["direction"], nav["phrase"])
+
+            draw_navigation_hints(overlay_bgr, nav)
 
             # --- Draw FPS counter on the overlay ---
             fps_text = f"FPS: {1000.0 / max(result['latency_ms'], 1):.1f}"
@@ -117,23 +120,6 @@ def run(camera_index: int = 0, max_fps: float = 30.0) -> None:
                 overlay_bgr, fps_text,
                 (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9,
                 (0, 255, 255), 2, cv2.LINE_AA,
-            )
-
-            # --- Draw navigation direction + scores ---
-            scores = nav["scores"]
-            dir_text = f"Dir: {nav['direction']}"
-            score_text = (
-                f"L:{scores['left']:.0%}  C:{scores['center']:.0%}  R:{scores['right']:.0%}"
-            )
-            cv2.putText(
-                overlay_bgr, dir_text,
-                (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.8,
-                (255, 255, 255), 2, cv2.LINE_AA,
-            )
-            cv2.putText(
-                overlay_bgr, score_text,
-                (10, 95), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
-                (200, 200, 200), 1, cv2.LINE_AA,
             )
 
             # --- Show the result ---
