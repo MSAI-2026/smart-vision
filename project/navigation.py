@@ -30,8 +30,7 @@ class NavigationAdvisor:
         key = id(id2label)
         if self._id2label_id == key:
             return
-        label_lookup = {str(v).strip().lower(): int(k) for k, v in id2label.items()}
-        self._walk_ids = _resolve_ids(CATEGORIES["walkable"], label_lookup)
+        self._walk_ids = _resolve_ids(CATEGORIES["walkable"], id2label)
         self._id2label_id = key
 
     def _compute_scores(self, class_map: np.ndarray) -> dict[str, float]:
