@@ -8,6 +8,15 @@ Colours in the preview window:
 - **Red** -- obstacles (chair, table, sofa, bed, person)
 - **Blue** -- walls
 
+Navigation uses a simple per-frame pipeline:
+
+1. **Walkable mask** -- floor / carpet / rug pixels in the lower path band
+2. **Largest connected free-space region** -- biggest walkable blob (connected components)
+3. **Centroid steering** -- steer toward that blob’s horizontal center (left / forward / right)
+4. **Emergency stop zone** -- bottom-center rectangle; dense obstacles there force an immediate stop
+
+The overlay also shows a yellow dot at the free-space centroid and a red box for the danger zone when triggered.
+
 ## Setup
 
 ```bash
