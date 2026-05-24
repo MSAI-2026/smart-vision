@@ -4,8 +4,7 @@ draw detection boxes on top.
 
 Segmentation colours:
     Green  = walkable surfaces  (floor, carpet, rug, stairs)
-    Red    = obstacles          (any class not walkable or wall)
-    Blue   = walls + windows    (wall, door, window, windowpane)
+    (everything else left untinted so the user sees the raw scene)
 
 Detection boxes (YOLO) are drawn as yellow rectangles with the class label.
 """
@@ -77,8 +76,6 @@ def build_overlay(frame_bgr: np.ndarray, class_map: np.ndarray, id2label: dict) 
         colour = np.array(COLOURS_BGR[colour_key], dtype=np.float32)
         overlay[mask] = (1.0 - ALPHA) * overlay[mask] + ALPHA * colour
 
-    _blend(~np.isin(class_map, list(passable_ids)), "obstacle")
-    _blend(np.isin(class_map, list(wall_ids)), "wall")
     _blend(np.isin(class_map, list(walk_ids)), "walkable")
 
     return overlay.astype(np.uint8)
