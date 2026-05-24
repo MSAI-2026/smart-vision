@@ -1,20 +1,22 @@
 """
-navigation.py -- Obstacle-avoidance direction from a segmentation map.
+navigation.py -- Obstacle-avoidance direction from segmentation + detection.
 
-Scores focus on the lower frame (path at your feet), penalize obstacles in
-the center column, and apply hysteresis so forward guidance does not flicker.
+Walkable pixels = floor pixels from SegFormer that are NOT inside any YOLO
+detection box. Scores focus on the lower frame, penalize obstacles in the
+center column, and apply hysteresis so forward guidance does not flicker.
 """
 
 from collections import Counter, deque
 
 import numpy as np
 
+from project.detector import Detection, boxes_to_mask
 from project.guidance import DIRECTION_TO_REGION, phrase_for
 from project.overlay import CATEGORIES, _resolve_ids
 
 
 class NavigationAdvisor:
-    """Stateful advisor that converts segmentation maps into directions."""
+    """Stateful advisor that converts segmentation + detections into directions."""
 
     DIRECTIONS = ("MOVE LEFT", "MOVE FORWARD", "MOVE RIGHT", "STOP")
 
@@ -64,23 +66,40 @@ class NavigationAdvisor:
             "right": (rows, slice(2 * third, w)),
         }
 
-    def _compute_scores(self, class_map: np.ndarray) -> dict[str, float]:
-        """Walkable-pixel ratio per column in the lower path band."""
+    def _build_masks(
+        self,
+        class_map: np.ndarray,
+        detections: list[Detection],
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Combine floor segmentation with YOLO boxes.
+
+        Returns:
+            walkable_mask  -- True where floor AND not inside a detection box
+            obstacle_mask  -- True where not passable OR inside a detection box
+        """
         h, w = class_map.shape[:2]
-        safe_mask = np.isin(class_map, list(self._walk_ids))
+        floor_mask = np.isin(class_map, list(self._walk_ids))
+        passable_mask = np.isin(class_map, list(self._passable_ids))
+        det_mask = boxes_to_mask(detections, h, w)
+
+        walkable_mask = floor_mask & ~det_mask
+        obstacle_mask = (~passable_mask) | det_mask
+        return walkable_mask, obstacle_mask
+
+    def _compute_scores(self, walkable_mask: np.ndarray) -> dict[str, float]:
+        """Walkable-pixel ratio per column in the lower path band."""
+        h, w = walkable_mask.shape[:2]
         scores: dict[str, float] = {}
-
         for name, (row_sl, col_sl) in self._region_slices(h, w).items():
-            region_mask = safe_mask[row_sl, col_sl]
-            scores[name] = float(region_mask.sum()) / max(region_mask.size, 1)
-
+            region = walkable_mask[row_sl, col_sl]
+            scores[name] = float(region.sum()) / max(region.size, 1)
         return scores
 
-    def _center_obstacle_ratio(self, class_map: np.ndarray) -> float:
+    def _center_obstacle_ratio(self, obstacle_mask: np.ndarray) -> float:
         """Share of obstacle pixels in the lower center column."""
-        h, w = class_map.shape[:2]
+        h, w = obstacle_mask.shape[:2]
         row_sl, col_sl = self._region_slices(h, w)["center"]
-        obstacle_mask = ~np.isin(class_map, list(self._passable_ids))
         region = obstacle_mask[row_sl, col_sl]
         return float(region.sum()) / max(region.size, 1)
 
@@ -132,14 +151,20 @@ class NavigationAdvisor:
         """Majority vote over the history buffer."""
         if not self._history:
             return "STOP"
-        counter = Counter(self._history)
-        return counter.most_common(1)[0][0]
+        return Counter(self._history).most_common(1)[0][0]
 
-    def update(self, class_map: np.ndarray, id2label: dict) -> dict:
+    def update(
+        self,
+        class_map: np.ndarray,
+        id2label: dict,
+        detections: list[Detection],
+    ) -> dict:
         """Process one frame and return direction, phrase, and debug info."""
         self._ensure_class_ids(id2label)
-        scores = self._compute_scores(class_map)
-        center_obstacle = self._center_obstacle_ratio(class_map)
+
+        walkable_mask, obstacle_mask = self._build_masks(class_map, detections)
+        scores = self._compute_scores(walkable_mask)
+        center_obstacle = self._center_obstacle_ratio(obstacle_mask)
 
         raw, stop_reason = self._pick_direction(scores, center_obstacle)
         self._history.append(raw)

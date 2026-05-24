@@ -5,3 +5,4 @@ pyttsx3
 torch
 torchvision
 transformers
+ultralytics

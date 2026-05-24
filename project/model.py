@@ -1,5 +1,9 @@
 """
-model.py -- Load the SegFormer segmentation model and run inference on a single frame.
+model.py -- Load SegFormer-B0 (ADE20K) for floor + window segmentation.
+
+B0 is ~7x smaller than the previous B2 checkpoint and runs comfortably on a
+worker thread at ~7-10 Hz on Apple Silicon. Same ADE20K label space so the
+existing overlay/navigation code keeps working.
 """
 
 import time
@@ -10,8 +14,20 @@ import torch.nn.functional as F
 from PIL import Image
 from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor
 
-# Pre-trained SegFormer model fine-tuned on ADE20K (150 indoor/outdoor classes).
-MODEL_NAME = "nvidia/segformer-b2-finetuned-ade-512-512"
+from project.mps_lock import MPS_LOCK
+
+
+class _NullCtx:
+    """No-op context manager for non-MPS devices."""
+    def __enter__(self): return None
+    def __exit__(self, *exc): return False
+
+# SegFormer-B0 fine-tuned on ADE20K (150 indoor/outdoor classes including
+# "floor", "wall", "windowpane", "door", which is what we care about).
+MODEL_NAME = "nvidia/segformer-b0-finetuned-ade-512-512"
+
+# Network input side. 384 keeps floor edges crisp without tanking throughput.
+INPUT_SIZE = 384
 
 
 def _pick_device() -> torch.device:
@@ -35,6 +51,10 @@ def load_model(model_name: str = MODEL_NAME):
     model.to(device)
     model.eval()
 
+    # Half precision on accelerator devices gives a healthy speed-up.
+    if device.type in ("cuda", "mps"):
+        model = model.to(dtype=torch.float16)
+
     return processor, model, device
 
 
@@ -49,23 +69,34 @@ def segment(image: Image.Image, processor, model, device) -> dict:
     """
     original_w, original_h = image.size
 
-    # Pre-process: the processor resizes/normalises for the network automatically.
-    inputs = processor(images=image, return_tensors="pt")
-    inputs = {k: v.to(device) for k, v in inputs.items()}
+    # Resize on CPU to a fixed small input; cheaper than letting the processor
+    # auto-pick (it defaults to ~512 which kills frame-rate on MPS).
+    small = image.resize((INPUT_SIZE, INPUT_SIZE), Image.BILINEAR)
+    inputs = processor(images=small, return_tensors="pt")
+    pixel_values = inputs["pixel_values"].to(device)
+    if model.dtype == torch.float16:
+        pixel_values = pixel_values.to(dtype=torch.float16)
 
-    # Forward pass (no gradient needed).
     start = time.perf_counter()
-    with torch.no_grad():
-        logits = model(**inputs).logits
-    latency_ms = (time.perf_counter() - start) * 1000.0
+    # MPS backend is not thread-safe; serialise with the detector.
+    need_lock = device.type == "mps"
+    with (MPS_LOCK if need_lock else _NullCtx()):
+        with torch.no_grad():
+            logits = model(pixel_values=pixel_values).logits
 
-    # Up-sample logits back to the original frame size so the overlay aligns.
-    logits = F.interpolate(
-        logits,
-        size=(original_h, original_w),
-        mode="bilinear",
-        align_corners=False,
-    )
+        # Up-sample logits back to the original frame size so the overlay aligns.
+        logits = F.interpolate(
+            logits.float(),
+            size=(original_h, original_w),
+            mode="bilinear",
+            align_corners=False,
+        )
+
+        if device.type == "mps":
+            torch.mps.synchronize()
+        elif device.type == "cuda":
+            torch.cuda.synchronize()
+    latency_ms = (time.perf_counter() - start) * 1000.0
 
     # Take the most likely class per pixel.
     class_map = logits.argmax(dim=1)[0].cpu().numpy().astype(np.int32)

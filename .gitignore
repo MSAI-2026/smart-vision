@@ -24,4 +24,4 @@ data/
 .vscode/
 
 ADE*/
-python/models/*
+python/models/*yolov8n.pt

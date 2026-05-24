@@ -1,13 +1,19 @@
 """
-overlay.py -- Build a colour-tinted overlay from a segmentation class map.
+overlay.py -- Build a colour-tinted overlay from a segmentation class map and
+draw detection boxes on top.
 
-Colours:
+Segmentation colours:
     Green  = walkable surfaces  (floor, carpet, rug, stairs)
     Red    = obstacles          (any class not walkable or wall)
-    Blue   = walls              (wall, door, window)
+    Blue   = walls + windows    (wall, door, window, windowpane)
+
+Detection boxes (YOLO) are drawn as yellow rectangles with the class label.
 """
 
+import cv2
 import numpy as np
+
+from project.detector import Detection
 
 # ADE20K class names grouped into categories we care about.
 # Names match / substring-match SegFormer ADE20K labels (e.g. windowpane, screen door).
@@ -26,6 +32,13 @@ COLOURS_BGR = {
 # How strongly the tint is blended over the original frame (0-1).
 ALPHA = 0.45
 
+# Detection box drawing.
+_BOX_COLOUR = (0, 255, 255)   # yellow, BGR
+_BOX_THICKNESS = 2
+_LABEL_FONT = cv2.FONT_HERSHEY_SIMPLEX
+_LABEL_SCALE = 0.5
+_LABEL_THICKNESS = 1
+
 
 def _resolve_ids(category_names: list[str], id2label: dict) -> set[int]:
     """
@@ -33,16 +46,13 @@ def _resolve_ids(category_names: list[str], id2label: dict) -> set[int]:
     Handles exact matches and substring matches (ADE labels can contain synonyms).
     """
     ids: set[int] = set()
-    # Build a lowercase lookup from the model's label map.
     label_lookup = {str(v).strip().lower(): int(k) for k, v in id2label.items()}
 
     for name in category_names:
         target = name.lower().strip()
-        # Try exact match first.
         if target in label_lookup:
             ids.add(label_lookup[target])
             continue
-        # Fall back to substring match.
         for label, cid in label_lookup.items():
             if target in label:
                 ids.add(cid)
@@ -53,14 +63,7 @@ def _resolve_ids(category_names: list[str], id2label: dict) -> set[int]:
 def build_overlay(frame_bgr: np.ndarray, class_map: np.ndarray, id2label: dict) -> np.ndarray:
     """
     Blend category colours onto the camera frame based on the segmentation class map.
-
-    Args:
-        frame_bgr  -- original camera frame in BGR (from cv2)
-        class_map  -- (H, W) array of predicted class IDs
-        id2label   -- model's class-ID-to-label mapping
-
-    Returns:
-        BGR image (same size) with coloured segmentation overlay.
+    Does NOT draw detection boxes; call draw_detections() afterwards.
     """
     overlay = frame_bgr.copy().astype(np.float32)
 
@@ -74,9 +77,35 @@ def build_overlay(frame_bgr: np.ndarray, class_map: np.ndarray, id2label: dict) 
         colour = np.array(COLOURS_BGR[colour_key], dtype=np.float32)
         overlay[mask] = (1.0 - ALPHA) * overlay[mask] + ALPHA * colour
 
-    # Red first, then blue, then green so walkable/wall win over the obstacle complement.
     _blend(~np.isin(class_map, list(passable_ids)), "obstacle")
     _blend(np.isin(class_map, list(wall_ids)), "wall")
     _blend(np.isin(class_map, list(walk_ids)), "walkable")
 
     return overlay.astype(np.uint8)
+
+
+def draw_detections(frame_bgr: np.ndarray, detections: list[Detection]) -> None:
+    """Draw YOLO detection boxes + labels on top of the overlay (in place)."""
+    for d in detections:
+        cv2.rectangle(
+            frame_bgr,
+            (d.x1, d.y1), (d.x2, d.y2),
+            _BOX_COLOUR, _BOX_THICKNESS, cv2.LINE_AA,
+        )
+        label = f"{d.class_name} {d.confidence:.2f}"
+        (tw, th), _ = cv2.getTextSize(
+            label, _LABEL_FONT, _LABEL_SCALE, _LABEL_THICKNESS,
+        )
+        y_text = max(th + 4, d.y1 - 4)
+        cv2.rectangle(
+            frame_bgr,
+            (d.x1, y_text - th - 4),
+            (d.x1 + tw + 4, y_text),
+            _BOX_COLOUR, -1,
+        )
+        cv2.putText(
+            frame_bgr, label,
+            (d.x1 + 2, y_text - 2),
+            _LABEL_FONT, _LABEL_SCALE,
+            (0, 0, 0), _LABEL_THICKNESS, cv2.LINE_AA,
+        )
