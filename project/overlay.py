@@ -3,10 +3,11 @@ overlay.py -- Build a colour-tinted overlay from a segmentation class map and
 draw detection boxes on top.
 
 Segmentation colours:
-    Green  = walkable surfaces  (floor, carpet, rug, stairs)
+    Yellow = walkable surfaces  (floor, carpet, rug, stairs)
+    Blue   = obstacles / walls
     (everything else left untinted so the user sees the raw scene)
 
-Detection boxes (YOLO) are drawn as yellow rectangles with the class label.
+Detection boxes (YOLO) are drawn as blue rectangles with the class label.
 """
 
 import cv2
@@ -23,16 +24,16 @@ CATEGORIES = {
 
 # BGR colours for each category (OpenCV uses BGR, not RGB).
 COLOURS_BGR = {
-    "walkable": (0, 255, 0),    # green
-    "obstacle": (0, 0, 255),    # red
-    "wall":     (255, 0, 0),    # blue
+    "walkable": (0, 255, 255),  # yellow
+    "obstacle": (255, 0, 0),    # blue
+    # "wall":     (255, 0, 0),    # blue
 }
 
 # How strongly the tint is blended over the original frame (0-1).
 ALPHA = 0.45
 
 # Detection box drawing.
-_BOX_COLOUR = (0, 255, 255)   # yellow, BGR
+_BOX_COLOUR = (255, 0, 0)     # blue, BGR
 _BOX_THICKNESS = 2
 _LABEL_FONT = cv2.FONT_HERSHEY_SIMPLEX
 _LABEL_SCALE = 0.5
@@ -77,6 +78,7 @@ def build_overlay(frame_bgr: np.ndarray, class_map: np.ndarray, id2label: dict) 
         overlay[mask] = (1.0 - ALPHA) * overlay[mask] + ALPHA * colour
 
     _blend(np.isin(class_map, list(walk_ids)), "walkable")
+    # _blend(np.isin(class_map, list(wall_ids)), "wall")
 
     return overlay.astype(np.uint8)
 

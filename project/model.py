@@ -24,7 +24,7 @@ class _NullCtx:
 
 # SegFormer-B0 fine-tuned on ADE20K (150 indoor/outdoor classes including
 # "floor", "wall", "windowpane", "door", which is what we care about).
-MODEL_NAME = "nvidia/segformer-b0-finetuned-ade-512-512"
+MODEL_NAME = "nvidia/segformer-b2-finetuned-ade-512-512"
 
 # Network input side. 384 keeps floor edges crisp without tanking throughput.
 INPUT_SIZE = 384
